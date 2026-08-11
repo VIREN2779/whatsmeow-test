@@ -18,3 +18,12 @@ go mod tidy
 ```powershell
 go run main.go
 ```
+
+**4. Install a C compiler**
+1. **MinGW-w64** via https://www.msys2.org/ (install msys2, then run `pacman -S mingw-w64-ucrt-x86_64-gcc` inside it)
+2. Add its `bin` folder to PATH
+3. Enable CGO:
+   ```powershell
+   $env:CGO_ENABLED=1
+   go run main.go
+   ```
