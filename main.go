@@ -1,20 +1,21 @@
 package main
 
 import (
-	"context"
-	"fmt"
-	"os"
-	"os/signal"
-	"syscall"
+	"context"   // for context.Context - handles cancellation/timeouts across function calls
+	"fmt"       // for Println - printing to terminal
+	"os"        // for os.Stdout, os.Signal - OS-level operations
+	"os/signal" // for catching Ctrl+C / termination signals
+	"strings"   // for strings.Contains / strings.ToLower - case-insensitive text matching
+	"syscall"   // for SIGTERM - the actual OS signal constant
 
-	"go.mau.fi/whatsmeow"
-	"go.mau.fi/whatsmeow/store/sqlstore"
-	"go.mau.fi/whatsmeow/types"
-	"go.mau.fi/whatsmeow/types/events"
-	waLog "go.mau.fi/whatsmeow/util/log"
-	qrterminal "github.com/mdp/qrterminal/v3"
+	"go.mau.fi/whatsmeow"                     // the core whatsmeow client library
+	"go.mau.fi/whatsmeow/store/sqlstore"      // SQLite-backed session storage
+	"go.mau.fi/whatsmeow/types"               // shared types like JID, StatusBroadcastJID
+	"go.mau.fi/whatsmeow/types/events"        // event structs (Message, Picture, etc.)
+	waLog "go.mau.fi/whatsmeow/util/log"      // whatsmeow's logging utility
+	qrterminal "github.com/mdp/qrterminal/v3" // renders QR codes in terminal
 
-	_ "modernc.org/sqlite" // needed for sqlite driver
+	_ "modernc.org/sqlite" // underscore import: loads the driver but you never call it directly
 )
 
 func eventHandler(evt any) {
@@ -24,21 +25,35 @@ func eventHandler(evt any) {
 		if v.Info.Chat == types.StatusBroadcastJID {
 			caption := v.Message.GetConversation()
 			if img := v.Message.GetImageMessage(); img != nil && caption == "" {
+				fmt.Println("-------------------------------------- Status/Story IMAGE--------------------------------------", v.Info.Sender, "-", caption)
 				caption = img.GetCaption()
 			}
 			if vid := v.Message.GetVideoMessage(); vid != nil && caption == "" {
+				fmt.Println("--------------------------------------Status/Story VIDEO--------------------------------------", v.Info.Sender, "-", caption)
 				caption = vid.GetCaption()
 			}
-			fmt.Println("+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++ Status update from:", v.Info.Sender, "-", caption)
 		} else {
-			fmt.Println("---------------------------------------------------------------------------------------- Received a message!", v.Message.GetConversation())
+			// Plain text messages come through GetConversation(); replies / messages with
+			// link-preview formatting come through as ExtendedTextMessage instead, so we
+			// fall back to that when GetConversation() is empty.
+			text := v.Message.GetConversation()
+			if text == "" {
+				text = v.Message.GetExtendedTextMessage().GetText()
+			}
+
+			fmt.Println("---------------------------------------------------------------------------------------- Received a message!", text)
+
+			if strings.Contains(strings.ToLower(text), "@start") {
+				fmt.Println("---------------------- @start command detected from:----------------------------------------", v.Info.Sender)
+				// TODO: trigger your start flow here
+			}
 		}
 
 	case *events.Picture:
 		if v.Remove {
-			fmt.Println("🖼️ Picture removed for:XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX", v.JID, "by", v.Author)
+			fmt.Println("---------------------- DP Picture removed----------------------------------------", v.JID, "by", v.Author)
 		} else {
-			fmt.Println("🖼️ Picture changed for:XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX", v.JID, "by", v.Author, "- new ID:", v.PictureID)
+			fmt.Println("---------------------- DP Picture changed----------------------------------------", v.JID, "by", v.Author, "- new ID:", v.PictureID)
 		}
 
 	}
