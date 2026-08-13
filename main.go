@@ -8,15 +8,39 @@ import (
 	"strings"   // for strings.Contains / strings.ToLower - case-insensitive text matching
 	"syscall"   // for SIGTERM - the actual OS signal constant
 
+	qrterminal "github.com/mdp/qrterminal/v3" // renders QR codes in terminal
 	"go.mau.fi/whatsmeow"                     // the core whatsmeow client library
 	"go.mau.fi/whatsmeow/store/sqlstore"      // SQLite-backed session storage
 	"go.mau.fi/whatsmeow/types"               // shared types like JID, StatusBroadcastJID
 	"go.mau.fi/whatsmeow/types/events"        // event structs (Message, Picture, etc.)
 	waLog "go.mau.fi/whatsmeow/util/log"      // whatsmeow's logging utility
-	qrterminal "github.com/mdp/qrterminal/v3" // renders QR codes in terminal
+	"google.golang.org/protobuf/proto"
 
 	_ "modernc.org/sqlite" // underscore import: loads the driver but you never call it directly
 )
+
+// client is now package-level so eventHandler (and downloadImage) can use it
+// without changing eventHandler's function signature.
+var client *whatsmeow.Client
+
+// SendTextMessage sends a local string message to a specific JID
+func SendTextMessage(client *whatsmeow.Client, targetJID string, messageText string) {
+	jid, err := types.ParseJID(targetJID)
+	if err != nil {
+		log.Fatalf("Invalid JID: %v", err)
+	}
+
+	msg := &waE2E.Message{
+		Conversation: proto.String(messageText),
+	}
+
+	resp, err := client.SendMessage(context.Background(), jid, msg)
+	if err != nil {
+		log.Printf("[SEND MESSAGE ERROR]: %v", err)
+		return
+	}
+	fmt.Printf("[MESSAGE SEND SUCCESS] Timestamp: %s\n", resp.Timestamp)
+}
 
 func eventHandler(evt any) {
 	switch v := evt.(type) {
@@ -25,11 +49,11 @@ func eventHandler(evt any) {
 		if v.Info.Chat == types.StatusBroadcastJID {
 			caption := v.Message.GetConversation()
 			if img := v.Message.GetImageMessage(); img != nil && caption == "" {
-				fmt.Println("-------------------------------------- Status/Story IMAGE--------------------------------------", v.Info.Sender, "-", caption)
+				fmt.Println("[STATUS - IMAGE] From:", v.Info.Sender, "| Caption:", caption)
 				caption = img.GetCaption()
 			}
 			if vid := v.Message.GetVideoMessage(); vid != nil && caption == "" {
-				fmt.Println("--------------------------------------Status/Story VIDEO--------------------------------------", v.Info.Sender, "-", caption)
+				fmt.Println("[STATUS - VIDEO] From:", v.Info.Sender, "| Caption:", caption)
 				caption = vid.GetCaption()
 			}
 		} else {
@@ -41,19 +65,19 @@ func eventHandler(evt any) {
 				text = v.Message.GetExtendedTextMessage().GetText()
 			}
 
-			fmt.Println("---------------------------------------------------------------------------------------- Received a message!", text)
+			fmt.Println("[MESSAGE]", text)
 
 			if strings.Contains(strings.ToLower(text), "@start") {
-				fmt.Println("---------------------- @start command detected from:----------------------------------------", v.Info.Sender)
-				// TODO: trigger your start flow here
+				fmt.Println("[COMMAND] @start detected from:", v.Info.Chat)
+				SendTextMessage(client, v.Info.Chat.String(), "Hello, Whatsapp Bot from this side!")
 			}
 		}
 
 	case *events.Picture:
 		if v.Remove {
-			fmt.Println("---------------------- DP Picture removed----------------------------------------", v.JID, "by", v.Author)
+			fmt.Println("[DP REMOVED] JID:", v.JID, "| By:", v.Author)
 		} else {
-			fmt.Println("---------------------- DP Picture changed----------------------------------------", v.JID, "by", v.Author, "- new ID:", v.PictureID)
+			fmt.Println("[DP CHANGED] JID:", v.JID, "| By:", v.Author, "| New ID:", v.PictureID)
 		}
 
 	}
@@ -84,7 +108,7 @@ func main() {
 			if evt.Event == "code" {
 				qrterminal.GenerateHalfBlock(evt.Code, qrterminal.L, os.Stdout)
 			} else {
-				fmt.Println("Login event:", evt.Event)
+				fmt.Println("[LOGIN]", evt.Event)
 			}
 		}
 	} else {
