@@ -98,6 +98,11 @@ func eventHandler(evt any) {
 				SendTextMessage(client, v.Info.Chat.String(), "Hello, Whatsapp Bot from this side!")
 			}
 
+			if strings.Contains(strings.ToLower(text), "i want to register") {
+				fmt.Println("[COMMAND] Register:", v.Info.Chat)
+				SendTextMessage(client, v.Info.Chat.String(), "https://docs.google.com/forms/d/e/1FAIpQLScR_UCYXlNRugL_sVP_O5_nOSilTpMeubH2Oqsd1rzGsTSo5Q/viewform?usp=publish-editor")
+			}
+
 			if img := v.Message.GetImageMessage(); img != nil {
 				fmt.Println("[MESSAGE - IMAGE] From:", v.Info.Sender)
 				downloadImage(v.Info.ID, img)
